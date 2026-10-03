@@ -77,7 +77,7 @@ Then:
 
 ## 4. `docs/lessons/README.md`
 
-````markdown
+~~~markdown
 # Lessons
 
 Each file is one lesson learned from a code review. Claude Code and Cursor both read
@@ -115,7 +115,7 @@ What a reviewer (human or AI) should look for in a diff to catch this.
 - Describe code problems, never people. No names in Rule/Why.
 - No secrets, credentials, customer data, or internal URLs.
 - Delete lessons that no longer apply (code removed, rule enforced by a linter, etc.).
-````
+~~~
 
 ---
 
