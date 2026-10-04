@@ -2,7 +2,7 @@
 
 **For:** engineering teams that use Claude Code and Cursor on the same repositories.
 
-**Goal:** Turn PR review findings into shared, versioned lesson files that both Claude Code and Cursor read. Everyone runs a self-review against them before opening a PR, so past findings aren't repeated. Each tool still does its own open review, so you keep two independent views.
+**Goal:** Turn PR review findings into shared, versioned lesson files that both Claude Code and Cursor read. Everyone runs a self-review against them before opening a PR, and reviewers use them when reviewing teammates' branches, so past findings aren't repeated. Each tool still does its own open review, so you keep two independent views.
 
 ---
 
@@ -19,12 +19,17 @@
    your branch  ◀────────────────────────  Claude Code  and  Cursor
                   pass 1: open review       (same skills, same lessons)
                   pass 2: lessons check
+                  pass 3: lesson conflicts
+                         peer-review
+   teammate's branch ◀───────────────────  draft review comments (no lessons
+                                           recorded until the author accepts)
 ```
 
 - **Single source of truth.** Lessons live in the repo, not in anyone's personal AI memory.
 - **Shared automatically.** Lessons merge through normal PRs, and everyone gets them with `git pull`, whichever tool they use.
-- **Keeps learning.** Every review adds or refines lessons. Contradictions are scoped or replaced instead of piling up (section 13), and a periodic cleanup keeps the set small and relevant.
-- **Independent reviews stay independent.** The self-review does an open review *before* it reads any lessons.
+- **Keeps learning.** Every review adds or refines lessons. Contradictions are scoped or replaced instead of piling up (section 15), and a periodic cleanup keeps the set small and relevant.
+- **Independent reviews stay independent.** Reviews do an open pass *before* reading any lessons.
+- **Gated.** Only confirmed findings become lessons, nothing is written or posted without your approval, and the skills behave differently on your branch vs. a teammate's (section 14).
 
 ---
 
@@ -39,7 +44,8 @@ docs/lessons/
   ...
 .claude/skills/                    # Claude Code reads natively; Cursor reads it for compatibility
   record-lessons/SKILL.md          # review findings → lesson files
-  self-review/SKILL.md             # two-pass review before opening a PR
+  self-review/SKILL.md             # review YOUR branch before opening a PR (with gates)
+  peer-review/SKILL.md             # review a TEAMMATE's branch/PR (draft comments only)
   harvest-lessons/SKILL.md         # one-time bootstrap from past PRs, memories, rules
 ```
 
@@ -60,18 +66,18 @@ Read and follow CLAUDE.md in this folder. It is the source of truth for agent in
 
 ```bash
 git checkout -b chore/shared-ai-lessons
-mkdir -p docs/lessons .claude/skills/record-lessons .claude/skills/self-review .claude/skills/harvest-lessons
+mkdir -p docs/lessons .claude/skills/record-lessons .claude/skills/self-review .claude/skills/peer-review .claude/skills/harvest-lessons
 ln -s CLAUDE.md AGENTS.md            # skip on Windows; use the pointer file above
 ```
 
 Then:
 
-1. Create the files in sections 4 through 8 with the contents shown.
+1. Create the files in sections 4 through 9 with the contents shown.
 2. Add the section 5 block to your existing `CLAUDE.md`. Don't replace the file.
 3. If your default branch isn't `main`, replace `main` in the skills with its name.
-4. Optionally, add the drift check from section 9 to CI.
+4. Optionally, add the drift check from section 10 to CI.
 5. Open a PR, get it reviewed and merged.
-6. Run the harvest from section 10 so the team doesn't start with an empty lessons folder.
+6. Run the harvest from section 11 so the team doesn't start with an empty lessons folder.
 
 ---
 
@@ -135,6 +141,7 @@ Add this block to your existing `CLAUDE.md`:
 - Never save PR review findings to personal memory. Record them in `docs/lessons/` with the
   `record-lessons` skill so the whole team (and Cursor) can use them.
 - Before opening a PR, run the `self-review` skill.
+- When reviewing someone else's branch or PR, use the `peer-review` skill, not `self-review`.
 - When you learn something durable about this codebase from a review, propose a lesson for it.
 ```
 
@@ -155,20 +162,27 @@ description: Turn PR review findings into shared lesson files in docs/lessons/. 
    - a PR number/URL: fetch its review comments and review summaries (e.g. `gh pr view <n> --comments`
      and `gh api repos/{owner}/{repo}/pulls/<n>/comments`);
    - findings from the current conversation.
-2. **Filter.** Keep only findings that were valid and would apply to future code. Skip pure style
-   nits already enforced by linters, one-off typos, and anything the author rejected with a good reason.
-3. **Generalize.** Rewrite each kept finding as a general rule using the format in `docs/lessons/README.md`.
+2. **Acceptance gate.** Only *confirmed* findings can become lessons. A finding is confirmed when:
+   the author fixed it in a later commit, the author or reviewers agreed in the thread, or the user
+   is the author and confirms it. Skip findings that were rejected, are still open/unanswered, or
+   came from a review whose PR is still under discussion. Say which findings were skipped and why.
+3. **Filter.** Of the confirmed findings, keep only those that would apply to future code. Skip pure
+   style nits already enforced by linters and one-off typos.
+4. **Generalize.** Rewrite each kept finding as a general rule using the format in `docs/lessons/README.md`.
    Set `paths` to the narrowest globs that cover where this could recur.
-4. **Deduplicate.** Read the existing lessons in `docs/lessons/`. If one already covers the rule,
+5. **Deduplicate.** Read the existing lessons in `docs/lessons/`. If one already covers the rule,
    update it instead (add the new source, bump `occurrences`, refresh `updated`, sharpen "How to check").
    If a new finding *contradicts* an existing lesson, don't add it alongside. Classify the conflict
    (conditional / obsolete / unclear) the same way `self-review` does, and propose the scoped,
    superseding or disputed versions instead.
-5. **Write** new files as `docs/lessons/YYYY-MM-<area>-<short-name>.md`. Set `found_by` to who caught it
+6. **Approval gate.** Show the proposed new/updated lesson files and wait for the user's approval
+   before writing anything.
+7. **Write** new files as `docs/lessons/YYYY-MM-<area>-<short-name>.md`. Set `found_by` to who caught it
    (`claude`, `cursor`, `teammate`, or a name).
-6. **Check for sensitive content.** No names in Rule/Why, no secrets, no customer data.
-7. **Report** a short list: created / updated / superseded / disputed / skipped (with reason). Suggest
-   committing the lessons in the current PR or a small separate `chore: lessons` PR.
+8. **Check for sensitive content.** No names in Rule/Why, no secrets, no customer data.
+9. **Report** a short list: created / updated / superseded / disputed / skipped (with reason).
+   **Where to commit:** in your own PR, or a small separate `chore: lessons` PR from `main`.
+   Never commit lessons to someone else's branch.
 ```
 
 ---
@@ -185,6 +199,13 @@ description: Review the current branch before opening a PR - an independent bug 
 
 Do the passes in order. Do NOT read docs/lessons/ until pass 1 is finished. This keeps the
 open review independent instead of turning it into a checklist.
+
+## Gate 0 - Is this your branch?
+- Compare the authors of the branch's commits (`git log origin/main..HEAD --format='%an <%ae>'`) with
+  the user (`git config user.email`). If a PR exists, also compare the PR author (`gh pr view --json author`)
+  with the logged-in user (`gh api user --jq .login`).
+- If the branch is someone else's, STOP and tell the user to use the `peer-review` skill instead.
+- If authors are mixed (e.g. you are finishing a teammate's work), ask the user which mode to use.
 
 ## Setup
 - Base branch: `main` (change if the repo uses another).
@@ -233,14 +254,68 @@ then suggest committing them in a `chore: lessons` PR.
 - **Lesson conflicts** - for each: the lessons involved, the classification, the evidence, and the exact
   proposed change to each lesson file
 - **Lessons checked:** count, and which were relevant
-- **Candidate new lessons:** pass-1 findings that look like recurring patterns. Offer to record them
-  with the `record-lessons` skill.
+- **Candidate new lessons:** pass-1 findings that look like recurring patterns.
+- **PR readiness verdict** (see Gate 1).
 Do not fix anything unless the user asks.
+
+## Gate 1 - Ready to open a PR?
+- **NOT READY** if any of these are unresolved: a high-severity pass-1 finding, or a violation of an
+  `active` lesson with severity high or medium.
+- **READY** otherwise (low-severity items and advisory/disputed lessons don't block).
+- The user can override NOT READY with a reason. Suggest noting that reason in the PR description
+  so reviewers see it.
+
+## Gate 2 - Recording lessons
+- Never call `record-lessons` automatically. A candidate lesson is offered only after the finding is
+  confirmed (the user fixed it or agrees it is real), and is recorded only with the user's approval.
+- Lesson conflict fixes from pass 3 follow the same rule: proposed, then applied only on approval.
 ```
 
 ---
 
-## 8. `.claude/skills/harvest-lessons/SKILL.md` (bootstrap, so you don't start empty)
+## 8. `.claude/skills/peer-review/SKILL.md`
+
+```markdown
+---
+name: peer-review
+description: Review a teammate's branch or PR using the team's lessons - produces draft review comments, never edits their code or records lessons. Use when the user says "review PR #123", "review <name>'s branch", "code review this PR", or asks to review a branch they didn't write.
+---
+
+# Peer review of a teammate's branch
+
+## Gate 0 - Is this someone else's branch?
+- Check the PR author (`gh pr view <n> --json author`) or the branch's commit authors against the user
+  (`gh api user --jq .login`, `git config user.email`).
+- If it is the user's own branch, STOP and tell them to use `self-review` instead.
+
+## Get the diff (read-only)
+- Prefer not to switch the user's working branch. Fetch and diff remotely:
+  `git fetch origin main <branch>` then `git diff origin/main...origin/<branch>`
+  (or `gh pr diff <n>`). Only check it out (`gh pr checkout <n>`) if the user agrees, e.g. to run tests.
+
+## Review
+Run passes 1-3 exactly as described in `.claude/skills/self-review/SKILL.md`
+(open review first, then lessons check, then lesson conflicts), against this diff.
+
+## Output - draft review comments
+- One comment per finding: file:line, severity, what's wrong, suggested fix. Cite the lesson file when
+  a finding comes from pass 2 so the author can read the rule.
+- Group as: blocking (high severity / active lesson violations) and non-blocking (low, advisory, disputed).
+- Write in a neutral tone about the code, not the person.
+
+## Gates
+- **No edits:** never modify, commit to, or push to the teammate's branch.
+- **No posting without approval:** show the draft comments first. Post to the PR only if the user asks.
+- **No lessons yet:** findings are unconfirmed until the author responds. Do not call `record-lessons`
+  now. Tell the user: once the PR is resolved, run "record lessons from PR #<n>" - `record-lessons`
+  will keep only the findings the author fixed or agreed with.
+- **Lesson conflicts** from pass 3 go into a separate `chore: lessons` PR from `main` (with the user's
+  approval), never into the teammate's PR.
+```
+
+---
+
+## 9. `.claude/skills/harvest-lessons/SKILL.md` (bootstrap, so you don't start empty)
 
 ```markdown
 ---
@@ -279,7 +354,7 @@ Convert review-relevant rules that aren't already enforced by linters.
 
 ---
 
-## 9. Optional: drift check in CI
+## 10. Optional: drift check in CI
 
 This makes sure `AGENTS.md` stays a symlink to `CLAUDE.md`:
 
@@ -295,11 +370,11 @@ grep -q "CLAUDE.md" AGENTS.md || { echo "AGENTS.md must point to CLAUDE.md"; exi
 
 ---
 
-## 10. Harvesting: don't start cold
+## 11. Harvesting: don't start cold
 
 Do this once after the setup PR merges. Each step ends in a PR, so the team reviews the lessons before they take effect.
 
-### 10a. From past PR reviews (one person)
+### 11a. From past PR reviews (one person)
 
 Requires the `gh` CLI, logged in with access to the repo. In Claude Code or Cursor, ask:
 
@@ -307,7 +382,7 @@ Requires the `gh` CLI, logged in with access to the repo. In Claude Code or Curs
 
 Review the proposed table, approve it, and open the `chore: harvest lessons` PR.
 
-### 10b. From your own Claude memories (every teammate who saved review findings)
+### 11b. From your own Claude memories (every teammate who saved review findings)
 
 AI memories are personal and live on each person's computer or account. Nobody else can harvest them for you.
 
@@ -315,9 +390,9 @@ AI memories are personal and live on each person's computer or account. Nobody e
 
    > Go through your memory for this project. Use the harvest-lessons skill to turn every PR review finding and codebase pitfall into lesson files in docs/lessons/. Show me the table first. After I approve and the lessons are written, remove those items from your memory.
 
-2. **Claude app (claude.ai):** if you saved findings there, open Settings → memory, copy the relevant entries into a text file, and give them to the harvest skill (step 10c's prompt works).
+2. **Claude app (claude.ai):** if you saved findings there, open Settings → memory, copy the relevant entries into a text file, and give them to the harvest skill (step 11c's prompt works).
 
-### 10c. From Cursor memories and rules (every Cursor user)
+### 11c. From Cursor memories and rules (every Cursor user)
 
 1. Copy any review-related entries from Cursor's settings (Rules / Memories / User Rules) into a text file.
 2. Ask, in either tool:
@@ -326,19 +401,20 @@ AI memories are personal and live on each person's computer or account. Nobody e
 
 3. Also check whether the repo has `.cursor/rules/` or `.cursorrules`. The skill can harvest those directly.
 
-### 10d. Submit
+### 11d. Submit
 
 Each person opens a `chore: harvest lessons (<name>)` PR. Reviewers merge duplicates. The skill dedupes, but check anyway.
 
 ---
 
-## 11. Daily workflow
+## 12. Daily workflow
 
 | When | You say (in Claude Code or Cursor) | What happens |
 |---|---|---|
 | You get a PR review | "Record lessons from PR #123" | New or updated lesson files to commit |
-| You review a teammate's PR | "Record lessons from my review on PR #456" | Same; commit in a small `chore: lessons` PR |
-| Before opening a PR | "Self review" | Pass 1 open review, pass 2 lessons check |
+| You review a teammate's PR | "Peer review PR #456" | Draft review comments for you to edit and post; no lessons yet |
+| That PR is resolved or merged | "Record lessons from PR #456" | Lessons from the findings the author fixed or agreed with; commit in a small `chore: lessons` PR |
+| Before opening a PR | "Self review" | Open review, lessons check, conflicts, then a READY / NOT READY verdict |
 | Self-review reports a lesson conflict | "Apply the proposed lesson fix" | Lessons scoped, replaced or marked disputed, ready to commit |
 | Monthly | "Review docs/lessons: merge duplicates, delete stale ones" | Smaller, sharper lesson set |
 
@@ -346,18 +422,44 @@ Each person opens a `chore: harvest lessons (<name>)` PR. Reviewers merge duplic
 
 ---
 
-## 12. Keeping Claude and Cursor reviews independent
+## 13. Keeping Claude and Cursor reviews independent
 
 The shared lessons make both tools catch the same *known* issues, which is intended. To keep their *independent* findings different:
 
-1. **Two-pass self-review.** Pass 1 runs before any lessons are read. This is built into the skill.
+1. **Open review first.** Pass 1 runs before any lessons are read, in both `self-review` and `peer-review`.
 2. **Different model families.** Use a non-Claude model in Cursor (for example GPT or Gemini). If Cursor runs a Claude model, the two reviews end up much more alike.
 3. **Don't share results early.** Run each review in a fresh chat, and compare only after both are done.
 4. **Record who caught it.** The `found_by` field shows which tool or person contributes which lessons. Lessons from one tool's catches teach the other.
 
 ---
 
-## 13. When lessons contradict each other
+## 14. Gates: what runs when, and who decides
+
+The skills behave differently depending on whose branch it is, and nothing permanent happens without a person approving it.
+
+| Gate | `self-review` (your branch) | `peer-review` (teammate's branch) |
+|---|---|---|
+| **0. Whose branch?** | Checks commit and PR authors. If the branch isn't yours, it stops and points you to `peer-review`. Mixed authors: it asks | Same check in reverse. If the branch is yours, it points you to `self-review` |
+| **Code changes** | Fixes only if you ask | Never edits, commits to or pushes to their branch |
+| **Output** | Findings for you to fix, plus a READY / NOT READY verdict | Draft review comments, blocking vs non-blocking. Posted only if you ask |
+| **1. Ready to open a PR?** | NOT READY while a high-severity finding or a high/medium active lesson violation is open. You can override with a reason, noted in the PR description | Not applicable |
+| **2. Recording lessons** | Offered only for findings you've confirmed; written only on your approval | Never during the review. After the PR is resolved, "record lessons from PR #N" keeps only findings the author fixed or agreed with |
+| **Lesson conflict fixes** | Proposed; applied on approval in your PR or a `chore: lessons` PR | Proposed; applied on approval in a separate `chore: lessons` PR, never in the teammate's PR |
+
+**Why the acceptance gate matters:** A reviewer's finding is an opinion until the author confirms it. Recording it at review time
+would turn unconfirmed or disputed opinions into team rules. Waiting until the PR is resolved means lessons only come from findings that
+held up. Rejected findings are skipped, and the reason is reported.
+
+**The cycle:**
+1. **Author:** runs `self-review` on their own branch, fixes, then opens the PR.
+2. **Reviewer:** runs `peer-review` on the PR and posts the comments they agree with.
+3. **Author:** fixes or replies.
+4. **Anyone, after the PR is resolved:** runs `record-lessons` on it. Confirmed findings become lessons through a small `chore: lessons` PR.
+5. **Everyone:** the next `self-review` and `peer-review` catch those issues automatically.
+
+---
+
+## 15. When lessons contradict each other
 
 With several people and two AI tools adding lessons, some will eventually contradict each other.
 For example, one lesson says "always retry failed API calls" and another says "never retry payment calls".
@@ -365,7 +467,7 @@ Nobody needs to hold a meeting. The skills catch the contradiction, figure out w
 the lessons. The user approves it, and the fix merges like any other lesson PR.
 
 **Who catches it**
-- `self-review` (pass 3): when two lessons that match your diff ask for opposite things.
+- `self-review` or `peer-review` (pass 3): when two lessons that match the diff ask for opposite things.
 - `record-lessons`: when a new finding contradicts an existing lesson.
 
 **How it decides**
@@ -390,7 +492,7 @@ version the next time it comes up.
 
 ---
 
-## 14. Rules of thumb
+## 16. Rules of thumb
 
 - **Repo vs. personal memory:** Facts about the codebase go in the repo. Personal preferences (tone, formatting) stay in personal memory.
 - **Lessons are public to the repo:** Anyone with repo access can read them, and they stay in git history. No secrets, customer data or names.
