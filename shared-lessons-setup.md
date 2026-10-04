@@ -23,7 +23,7 @@
 
 - **Single source of truth.** Lessons live in the repo, not in anyone's personal AI memory.
 - **Shared automatically.** Lessons merge through normal PRs, and everyone gets them with `git pull`, whichever tool they use.
-- **Keeps learning.** Every review adds or updates lessons, and a periodic cleanup keeps the set small and relevant.
+- **Keeps learning.** Every review adds or refines lessons. Contradictions are scoped or replaced instead of piling up (section 13), and a periodic cleanup keeps the set small and relevant.
 - **Independent reviews stay independent.** The self-review does an open review *before* it reads any lessons.
 
 ---
@@ -98,6 +98,9 @@ found_by: teammate             # claude | cursor | teammate | <name>
 added: 2026-09-14
 updated: 2026-09-14
 occurrences: 1                 # bump when the same finding shows up again
+applies_when: ""               # optional: condition under which the rule holds, e.g. "real-time sync features"
+status: active                 # active | disputed  (disputed = advisory only, not enforced)
+supersedes: ""                 # optional: file name of an older lesson this one replaces
 ---
 ## Rule
 One or two sentences, phrased as a general rule (not a one-off fix).
@@ -115,6 +118,9 @@ What a reviewer (human or AI) should look for in a diff to catch this.
 - Describe code problems, never people. No names in Rule/Why.
 - No secrets, credentials, customer data, or internal URLs.
 - Delete lessons that no longer apply (code removed, rule enforced by a linter, etc.).
+- Contradictions are resolved in the lessons themselves, not in meetings: scope both lessons with
+  `applies_when`/`paths` if both are right in different contexts; replace the old one (`supersedes`)
+  if it is obsolete; mark both `status: disputed` if the evidence doesn't decide.
 ~~~
 
 ---
@@ -155,11 +161,14 @@ description: Turn PR review findings into shared lesson files in docs/lessons/. 
    Set `paths` to the narrowest globs that cover where this could recur.
 4. **Deduplicate.** Read the existing lessons in `docs/lessons/`. If one already covers the rule,
    update it instead (add the new source, bump `occurrences`, refresh `updated`, sharpen "How to check").
+   If a new finding *contradicts* an existing lesson, don't add it alongside. Classify the conflict
+   (conditional / obsolete / unclear) the same way `self-review` does, and propose the scoped,
+   superseding or disputed versions instead.
 5. **Write** new files as `docs/lessons/YYYY-MM-<area>-<short-name>.md`. Set `found_by` to who caught it
    (`claude`, `cursor`, `teammate`, or a name).
 6. **Check for sensitive content.** No names in Rule/Why, no secrets, no customer data.
-7. **Report** a short list: created / updated / skipped (with reason). Suggest committing the lessons
-   in the current PR or a small separate `chore: lessons` PR.
+7. **Report** a short list: created / updated / superseded / disputed / skipped (with reason). Suggest
+   committing the lessons in the current PR or a small separate `chore: lessons` PR.
 ```
 
 ---
@@ -174,7 +183,7 @@ description: Review the current branch before opening a PR - an independent bug 
 
 # Self-review before a PR
 
-Do the two passes in order. Do NOT read docs/lessons/ until pass 1 is finished. This keeps the
+Do the passes in order. Do NOT read docs/lessons/ until pass 1 is finished. This keeps the
 open review independent instead of turning it into a checklist.
 
 ## Setup
@@ -196,12 +205,33 @@ Record findings with file:line, why it is a problem, and a suggested fix.
 1. List `docs/lessons/*.md` (skip README.md). Read the frontmatter of each.
 2. Select lessons whose `paths` match any changed file, or whose `tags` clearly relate to the change.
    Always include `severity: high` lessons with `paths: ["**"]`.
-3. For each selected lesson, apply its "How to check" to the diff.
-4. Record violations with file:line and the lesson file name.
+3. For each selected lesson, apply its "How to check" to the diff. If it has `applies_when`, first decide
+   whether the changed code meets that condition; skip the lesson if it doesn't.
+4. Record violations with file:line and the lesson file name. Violations of `status: disputed`
+   lessons are reported as advisory, not as violations.
+
+## Pass 3 - Lesson conflicts
+If two or more selected lessons would require opposite things for this diff, do not pick one silently.
+For each conflict, gather evidence: each lesson's `source`, `added`, `paths`, `applies_when`, its
+git history (`git log --follow docs/lessons/<file>`), whether the code or APIs it mentions still exist,
+and which rule the current code in each affected area actually follows. Then classify:
+
+- **Conditional** - both are right in different contexts (different features, paths, or situations).
+  Propose an `applies_when` condition and/or narrower `paths` for each, so they no longer overlap.
+- **Obsolete** - one has been replaced: it is older, the code/API it describes is gone, or recent code
+  consistently follows the other rule. Propose deleting or rewriting the old one, with
+  `supersedes: <old-file>` on the surviving lesson.
+- **Unclear** - the evidence doesn't decide. Propose `status: disputed` on both, so they are advisory
+  until someone resolves it, and say what evidence would settle it.
+
+Never edit lesson files during self-review. Show the proposals; apply them only if the user approves,
+then suggest committing them in a `chore: lessons` PR.
 
 ## Report
 - **Pass 1 - Independent findings** (most severe first)
-- **Pass 2 - Lesson violations** (cite the lesson file)
+- **Pass 2 - Lesson violations** (cite the lesson file; disputed lessons listed as advisory)
+- **Lesson conflicts** - for each: the lessons involved, the classification, the evidence, and the exact
+  proposed change to each lesson file
 - **Lessons checked:** count, and which were relevant
 - **Candidate new lessons:** pass-1 findings that look like recurring patterns. Offer to record them
   with the `record-lessons` skill.
@@ -309,6 +339,7 @@ Each person opens a `chore: harvest lessons (<name>)` PR. Reviewers merge duplic
 | You get a PR review | "Record lessons from PR #123" | New or updated lesson files to commit |
 | You review a teammate's PR | "Record lessons from my review on PR #456" | Same; commit in a small `chore: lessons` PR |
 | Before opening a PR | "Self review" | Pass 1 open review, pass 2 lessons check |
+| Self-review reports a lesson conflict | "Apply the proposed lesson fix" | Lessons scoped, replaced or marked disputed, ready to commit |
 | Monthly | "Review docs/lessons: merge duplicates, delete stale ones" | Smaller, sharper lesson set |
 
 **Tip:** Cursor may pick up skills automatically less reliably than Claude Code. Asking by name ("use the self-review skill") makes it dependable.
@@ -326,7 +357,40 @@ The shared lessons make both tools catch the same *known* issues, which is inten
 
 ---
 
-## 13. Rules of thumb
+## 13. When lessons contradict each other
+
+With several people and two AI tools adding lessons, some will eventually contradict each other.
+For example, one lesson says "always retry failed API calls" and another says "never retry payment calls".
+Nobody needs to hold a meeting. The skills catch the contradiction, figure out why, and propose a fix to
+the lessons. The user approves it, and the fix merges like any other lesson PR.
+
+**Who catches it**
+- `self-review` (pass 3): when two lessons that match your diff ask for opposite things.
+- `record-lessons`: when a new finding contradicts an existing lesson.
+
+**How it decides**
+
+| Case | Signals | Proposed fix |
+|---|---|---|
+| **Conditional:** both right, in different contexts | Lessons came from different features or paths; the code in each area follows its own rule | Add `applies_when` and/or narrow `paths` on both so they stop overlapping |
+| **Obsolete:** one replaced the other | Older lesson; the code or API it mentions is gone; recent code follows only the newer rule | Delete or rewrite the old lesson; add `supersedes:` to the newer one |
+| **Unclear:** evidence doesn't decide | None of the above fits with confidence | Mark both `status: disputed`: reported as advice only, not enforced, until someone with context resolves it |
+
+**What you see:** a "Lesson conflicts" section in the self-review report, listing the lessons involved,
+the case, the evidence and the exact proposed change. Nothing is edited until you approve.
+
+**How it learns:** The approved fix is written into the lesson files and merged through a normal
+`chore: lessons` PR. The next self-review, for anyone on the team, finds scoped or replaced lessons
+instead of a conflict. Each contradiction is resolved once, by whoever hits it first, and the lessons
+get more precise over time instead of piling up.
+
+**Disputed lessons don't block anyone.** They show up as advisory notes. Whoever has the context
+(often the person who owns that area of code) can resolve one later by approving a scoped or superseding
+version the next time it comes up.
+
+---
+
+## 14. Rules of thumb
 
 - **Repo vs. personal memory:** Facts about the codebase go in the repo. Personal preferences (tone, formatting) stay in personal memory.
 - **Lessons are public to the repo:** Anyone with repo access can read them, and they stay in git history. No secrets, customer data or names.
