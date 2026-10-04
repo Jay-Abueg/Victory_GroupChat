@@ -44,7 +44,7 @@ docs/lessons/
   ...
 .claude/skills/                    # Claude Code reads natively; Cursor reads it for compatibility
   record-lessons/SKILL.md          # review findings → lesson files
-  self-review/SKILL.md             # review YOUR branch before opening a PR (with gates)
+  self-review/SKILL.md             # review + fix YOUR branch before opening a PR (with gates)
   peer-review/SKILL.md             # review a TEAMMATE's branch/PR (draft comments only)
   harvest-lessons/SKILL.md         # one-time bootstrap from past PRs, memories, rules
 ```
@@ -192,7 +192,7 @@ description: Turn PR review findings into shared lesson files in docs/lessons/. 
 ```markdown
 ---
 name: self-review
-description: Review the current branch before opening a PR - an independent bug review first, then a check against the team's lessons in docs/lessons/. Use when the user says "self review", "review my branch", "check before PR", or is about to open a PR.
+description: Review and fix the current branch before opening a PR - an independent bug review first, then a check against the team's lessons in docs/lessons/, then fixes for clear-cut findings and a report of what was fixed and what needs the user's decision. Use when the user says "self review", "review my branch", "check before PR", or is about to open a PR.
 ---
 
 # Self-review before a PR
@@ -248,26 +248,46 @@ and which rule the current code in each affected area actually follows. Then cla
 Never edit lesson files during self-review. Show the proposals; apply them only if the user approves,
 then suggest committing them in a `chore: lessons` PR.
 
+## Fix
+Sort every finding from passes 1 and 2 into one of two groups:
+
+- **Fix now** - the fix is clear, local, and doesn't change intended behavior: a bug with an obvious
+  correction, a missing null check, missing validation, an active lesson violation with a clear remedy,
+  a missing test for the changed code. Apply these fixes.
+- **Needs the user's decision** - anything where a reasonable person could choose differently:
+  changes to behavior, APIs, data or schema; design or architecture trade-offs; large or multi-file
+  refactors; fixes you are not confident in; findings tied to `disputed` lessons; and all lesson
+  conflict proposals from pass 3. Do NOT apply these. Describe the options and recommend one.
+
+Rules for fixing:
+- Keep each fix minimal - only what the finding needs. No unrelated cleanups.
+- Leave the fixes uncommitted so the user can review the diff (`git diff`). Commit only if asked.
+- After fixing, run the repo's fast checks (lint, typecheck, tests for the changed code) and re-apply
+  pass 2 to the fixed code. If a fix breaks a check, revert that fix and move it to "Needs the user's decision".
+- Never edit `docs/lessons/` during self-review.
+
 ## Report
-- **Pass 1 - Independent findings** (most severe first)
-- **Pass 2 - Lesson violations** (cite the lesson file; disputed lessons listed as advisory)
-- **Lesson conflicts** - for each: the lessons involved, the classification, the evidence, and the exact
-  proposed change to each lesson file
-- **Lessons checked:** count, and which were relevant
-- **Candidate new lessons:** pass-1 findings that look like recurring patterns.
-- **PR readiness verdict** (see Gate 1).
-Do not fix anything unless the user asks.
+1. **Fixed** - for each: the finding (file:line), the lesson it came from if any, and what was changed and why.
+2. **Needs your decision** - for each: the finding, the options, your recommendation, and what happens if left as is.
+3. **Lesson conflicts** - the lessons involved, the classification, the evidence, and the exact proposed
+   change to each lesson file.
+4. **Verification** - which checks ran after the fixes, and their results.
+5. **Lessons checked** - count, and which were relevant.
+6. **PR readiness verdict** (Gate 1), based on the code *after* fixes.
+7. **Candidate new lessons** - findings that look like recurring patterns (Gate 2).
 
 ## Gate 1 - Ready to open a PR?
-- **NOT READY** if any of these are unresolved: a high-severity pass-1 finding, or a violation of an
-  `active` lesson with severity high or medium.
+- Evaluate after the fixes are applied.
+- **NOT READY** if any of these are still unresolved: a high-severity pass-1 finding, or a violation of an
+  `active` lesson with severity high or medium (for example, one waiting in "Needs your decision").
 - **READY** otherwise (low-severity items and advisory/disputed lessons don't block).
 - The user can override NOT READY with a reason. Suggest noting that reason in the PR description
   so reviewers see it.
 
 ## Gate 2 - Recording lessons
 - Never call `record-lessons` automatically. A candidate lesson is offered only after the finding is
-  confirmed (the user fixed it or agrees it is real), and is recorded only with the user's approval.
+  confirmed (the user keeps the fix, or agrees the finding is real), and is recorded only with the
+  user's approval.
 - Lesson conflict fixes from pass 3 follow the same rule: proposed, then applied only on approval.
 ```
 
@@ -414,7 +434,7 @@ Each person opens a `chore: harvest lessons (<name>)` PR. Reviewers merge duplic
 | You get a PR review | "Record lessons from PR #123" | New or updated lesson files to commit |
 | You review a teammate's PR | "Peer review PR #456" | Draft review comments for you to edit and post; no lessons yet |
 | That PR is resolved or merged | "Record lessons from PR #456" | Lessons from the findings the author fixed or agreed with; commit in a small `chore: lessons` PR |
-| Before opening a PR | "Self review" | Open review, lessons check, conflicts, then a READY / NOT READY verdict |
+| Before opening a PR | "Self review" | Review, fix the clear-cut findings, then report: fixed / needs your decision / verdict |
 | Self-review reports a lesson conflict | "Apply the proposed lesson fix" | Lessons scoped, replaced or marked disputed, ready to commit |
 | Monthly | "Review docs/lessons: merge duplicates, delete stale ones" | Smaller, sharper lesson set |
 
@@ -440,8 +460,8 @@ The skills behave differently depending on whose branch it is, and nothing perma
 | Gate | `self-review` (your branch) | `peer-review` (teammate's branch) |
 |---|---|---|
 | **0. Whose branch?** | Checks commit and PR authors. If the branch isn't yours, it stops and points you to `peer-review`. Mixed authors: it asks | Same check in reverse. If the branch is yours, it points you to `self-review` |
-| **Code changes** | Fixes only if you ask | Never edits, commits to or pushes to their branch |
-| **Output** | Findings for you to fix, plus a READY / NOT READY verdict | Draft review comments, blocking vs non-blocking. Posted only if you ask |
+| **Code changes** | Fixes clear-cut findings itself (left uncommitted for you to review). Behavior, design or uncertain changes wait for your decision | Never edits, commits to or pushes to their branch |
+| **Output** | What was fixed and how, what needs your decision, check results, and a READY / NOT READY verdict | Draft review comments, blocking vs non-blocking. Posted only if you ask |
 | **1. Ready to open a PR?** | NOT READY while a high-severity finding or a high/medium active lesson violation is open. You can override with a reason, noted in the PR description | Not applicable |
 | **2. Recording lessons** | Offered only for findings you've confirmed; written only on your approval | Never during the review. After the PR is resolved, "record lessons from PR #N" keeps only findings the author fixed or agreed with |
 | **Lesson conflict fixes** | Proposed; applied on approval in your PR or a `chore: lessons` PR | Proposed; applied on approval in a separate `chore: lessons` PR, never in the teammate's PR |
@@ -451,7 +471,7 @@ would turn unconfirmed or disputed opinions into team rules. Waiting until the P
 held up. Rejected findings are skipped, and the reason is reported.
 
 **The cycle:**
-1. **Author:** runs `self-review` on their own branch, fixes, then opens the PR.
+1. **Author:** runs `self-review` on their own branch. It fixes the clear-cut findings, and the author decides the rest, then opens the PR.
 2. **Reviewer:** runs `peer-review` on the PR and posts the comments they agree with.
 3. **Author:** fixes or replies.
 4. **Anyone, after the PR is resolved:** runs `record-lessons` on it. Confirmed findings become lessons through a small `chore: lessons` PR.
